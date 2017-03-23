@@ -1,0 +1,198 @@
+<?php
+require_once "includes/tripal_analysis_pfam.chado_node.inc";
+require_once "includes/tripal_analysis_pfam.xml_parser.inc";
+require_once "includes/tripal_analysis_pfam.admin.inc";
+
+require_once "theme/tripal_analysis_pfam.theme.inc";
+
+
+/*******************************************************************************
+ * Tripal Pfam lets users show/hide iprscan results associated with a tripal
+ * feature
+ ******************************************************************************/
+function tripal_analysis_pfam_init() {
+
+  // Add javascript and style sheet
+   drupal_add_css(drupal_get_path('module', 'tripal_analysis_pfam') . '/theme/css/tripal_analysis_pfam.css', 'theme');
+   drupal_add_js( drupal_get_path('module', 'tripal_analysis_pfam') . '/theme/js/tripal_analysis_pfam.js');
+}
+/**
+ * tripal_analysis_pfam_menu()
+ * HOOK: Implementation of hook_menu()
+ * Entry points and paths of the module
+ */
+function tripal_analysis_pfam_menu() {
+  $items['admin/tripal/extension/tripal_pfam_analysis'] = array(
+    'title' => 'Tripal Pfam Analyses',
+    'description' => 'Settings for the displays of PfamScan analysis results.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tripal_analysis_pfam_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ *
+ *
+ * @ingroup tripal_analysis_pfam
+ */
+function tripal_analysis_pfam_block($op = 'list', $delta = 0, $edit=array()) {
+  switch ($op) {
+    case 'list':
+      $blocks['ipr_base']['info'] = t('Analysis: Pfam Details');
+      $blocks['ipr_base']['cache'] = BLOCK_NO_CACHE;
+      
+      $blocks['featureipr']['info'] = t('Tripal Feature Pfam Results');
+      $blocks['featureipr']['cache'] = BLOCK_NO_CACHE;
+      
+      
+      return $blocks;
+  
+  
+    case 'view':
+      if (user_access('access chado_analysis_pfam content') and arg(0) == 'node' and is_numeric(arg(1))) {
+        $nid = arg(1);
+        $node = node_load($nid);
+      
+        $block = array();
+        switch ($delta) {
+          case 'ipr_base':
+            $block['subject'] = t('Pfam Details');
+            $block['content'] = theme('tripal_analysis_pfam_base', $node);
+            break;
+          case 'featureipr':
+            $block['subject'] = t('Pfam Results');
+            $block['content'] = theme('tripal_feature_pfam_results', $node);
+            break;
+          
+          default :
+        }
+        return $block;
+      }
+  }
+}
+
+/************************************************************************
+ *  We need to let drupal know about our theme functions and their arguments.
+ *  We create theme functions to allow users of the module to customize the
+ *  look and feel of the output generated in this module
+ */
+function tripal_analysis_pfam_theme($existing, $type, $theme, $path) {
+
+  $core_path = drupal_get_path('module', 'tripal_core');
+  $items = array (
+    'node__chado_analysis_pfam' => array (
+      'template' => 'node--chado-generic',
+      'render element' => 'node',
+      'base hook' => 'node',
+      'path' => "$core_path/theme/templates"
+    ),
+    'tripal_analysis_pfam_base' => array(
+      'variables' => array('node' => NULL),
+      'template' => 'tripal_analysis_pfam_base',
+      'path' => "$path/theme/templates",
+    ),
+    'tripal_analysis_pfam_teaser' => array(
+      'variables' => array('node' => NULL),
+      'template' => 'tripal_analysis_pfam_teaser',
+      'path' => "$path/theme/templates",
+    ),
+    
+      // feature templates
+    'tripal_feature_pfam_results' => array(
+      'variables' => array('node' => NULL),
+      'template' => 'tripal_feature_pfam_results',
+      'path' => "$path/theme/templates",
+    ),
+  );
+  
+  return $items;
+}
+
+
+
+
+
+/*******************************************************************************
+ * Set the permission types that the chado module uses.  Essentially we
+ * want permissionis that protect creation, editing and deleting of chado
+ * data objects
+ */
+function tripal_analysis_pfam_permission() {
+   return array(
+      'access chado_analysis_pfam content' => array(
+        'title' => t('View Pfam Analyses'),
+        'description' => t('Allow users to view Pfam analysis pages.'),
+      ),
+      'create chado_analysis_pfam content'=> array(
+        'title' => t('Create Pfam Analyses'),
+        'description' => t('Allow users to create Pfam analysis pages.'),
+      ),
+      'delete chado_analysis_pfam content'=> array(
+        'title' => t('Delete Pfam Analyses'),
+        'description' => t('Allow users to delete Pfam analysis pages.'),
+      ),
+      'edit chado_analysis_pfam content' => array(
+      'title' => t('Edit Pfam Analyses'),
+      'description' => t('Allow users to edit Pfam analysis pages.'),
+    ),
+   );
+}
+
+
+/**
+ *
+ *
+ * @ingroup tripal_analysis_pfam
+ */
+function tripal_analysis_pfam_job_describe_args($callback, $args) {
+
+
+   $new_args = array();
+   if ($callback == 'tripal_analysis_pfam_parseXMLFile') {
+
+      // add in the analysis
+      if ($args[0]) {
+         $analysis = tripal_core_chado_select('analysis', array('name'), array('analysis_id' => $args[0]));
+      }
+      $new_args['Analysis'] = $analysis[0]->name;
+
+      $new_args['File or Directory Name'] = $args[1];
+
+      if ($args[2]) {
+         $new_args['Parse GO terms'] = 'Yes';
+      }
+      else {
+         $new_args['Parse GO terms'] = 'No';
+      }
+
+      $new_args['Query name regular expression'] = $args[3];
+      $new_args['Query type'] = $args[4];
+      if ($args[5] == 1) {
+        $new_args['Feature identifier'] = 'feature unique name';
+      }
+      else {
+        $new_args['Feature identifier'] = 'feature name';
+      }
+   }
+   return $new_args;
+}
+
+/**
+ * Implementation of hook_form_alter()
+ *
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ *
+ */
+function tripal_analysis_pfam_form_alter(&$form, &$form_state, $form_id) {
+
+  if ($form_id == "chado_analysis_pfam_node_form") {
+    // turn off preview button for insert/updates
+    $form['actions']['preview']['#access'] = FALSE;
+  }
+}

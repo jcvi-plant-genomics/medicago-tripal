@@ -1,0 +1,295 @@
+<?php
+
+require_once "includes/tripal_analysis_unigene.chado_node.inc";
+require_once "includes/tripal_analysis_unigene.admin.inc";
+
+require_once "theme/tripal_analysis_unigene.theme.inc";
+
+function tripal_analysis_unigene_init() {
+   // Add style sheet
+   drupal_add_css(drupal_get_path('module', 'tripal_analysis_unigene') . '/theme/css/tripal_analysis_unigene.css', 'theme');
+}
+
+/**
+ * tripal_analysis_unigene_menu()
+ * HOOK: Implementation of hook_menu()
+ * Entry points and paths of the module
+ */
+function tripal_analysis_unigene_menu() {
+  $items['admin/tripal/extension/tripal_unigene_analysis'] = array(
+    'title' => 'Tripal Unigene Analyses',
+    'description' => 'Settings for the displays of Unigene analysis results.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tripal_analysis_unigene_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/*******************************************************************************
+ * Set the permission types that the chado module uses.  Essentially we
+ * want permissionis that protect creation, editing and deleting of chado
+ * data objects
+ */
+function tripal_analysis_unigene_permission() {
+  return array(
+      'access chado_analysis_unigene content' => array(
+          'title' => t('View Chado Analysis Unigene'),
+          'description' => t('Allow users to view chado analysis unigene pages.'),
+      ),
+      'create chado_analysis_unigene content' => array(
+          'title' => t('Create Chado Analysis Unigene'),
+          'description' => t('Allow users to create new chado analysis unigene pages.'),
+      ),
+      'delete chado_analysis_unigene content'=> array(
+          'title' => t('Delete Chado Analysis Unigene'),
+          'description' => t('Allow users to delete chado analysis unigene pages.'),
+      ),
+      'edit chado_analysis_unigene content'=> array(
+          'title' => t('Edit Chado Analysis Unigene'),
+          'description' => t('Allow users to edit chado analysis unigene pages.'),
+      ),
+  );
+}
+
+/**
+ *
+ *
+ * @ingroup tripal_analysis_unigene
+ */
+function tripal_analysis_unigene_block($op = 'list', $delta = 0, $edit=array()) {
+   switch ($op) {
+      case 'list':
+         $blocks['base_ugene']['info'] = t('Analysis: Unigene Details');
+         $blocks['base_ugene']['cache'] = BLOCK_NO_CACHE;
+
+         $blocks['feature_ugene']['info'] = t('Tripal Feature Unigene');
+         $blocks['feature_ugene']['cache'] = BLOCK_NO_CACHE;
+
+         $blocks['org_ugene']['info'] = t('Tripal Organism Unigene');
+         $blocks['org_ugene']['cache'] = BLOCK_NO_CACHE;
+         
+         return $blocks;
+
+
+      case 'view':
+         if (user_access('access chado_analysis_unigene content') and arg(0) == 'node' and is_numeric(arg(1))) {
+            $nid = arg(1);
+            $node = node_load($nid);
+ 
+            $block = array();
+            switch ($delta) {
+               case 'base_ugene':
+                  $block['subject'] = t('Unigene Details');
+                  $block['content'] = theme('tripal_analysis_unigene_base', $node);
+                  break;
+               case 'feature_ugene':
+                  $block['subject'] = t('Unigene');
+                  $block['content'] = theme('tripal_feature_unigenes', $node);
+                  break;
+               case 'org_ugene':
+                  $block['subject'] = t('Unigene');
+                  $block['content'] = theme('tripal_organism_unigenes', $node);
+                  break;
+               default :
+            }
+            return $block;
+         }
+   }
+}
+
+
+/************************************************************************
+ *  We need to let drupal know about our theme functions and their arguments.
+ *  We create theme functions to allow users of the module to customize the
+ *  look and feel of the output generated in this module
+ */
+function tripal_analysis_unigene_theme($existing, $type, $theme, $path) {
+  
+  $core_path = drupal_get_path('module', 'tripal_core');
+  $items = array (
+      'node__chado_analysis_unigene' => array (
+          'template' => 'node--chado-generic',
+          'render element' => 'node',
+          'base hook' => 'node',
+          'path' => "$core_path/theme/templates"
+      ),
+      'tripal_analysis_unigene_base' => array(
+          'variables' => array('node' => NULL),
+          'template' => 'tripal_analysis_unigene_base',
+          'path' => "$path/theme/templates",
+      ),
+      'tripal_analysis_unigene_teaser' => array(
+          'variables' => array('node' => NULL),
+          'template' => 'tripal_analysis_unigene_teaser',
+          'path' => "$path/theme/templates",
+      ),
+      'tripal_organism_unigenes' => array(
+          'variables' => array('node' => NULL),
+          'template' => 'tripal_organism_unigenes',
+          'path' => "$path/theme/templates",
+      ),
+      'tripal_feature_unigenes' => array(
+          'variables' => array('node' => NULL),
+          'template' => 'tripal_feature_unigenes',
+          'path' => "$path/theme/templates",
+      ),
+  );
+  
+  return $items;
+
+}
+
+/*******************************************************************************
+*
+*/
+function tripal_analysis_unigene_get_alignments($map) {
+
+   // get the alignments for this feature
+   $sql = "SELECT F.name as feature_name, FL.fmin, FL.fmax, FL.strand, ".
+          "  FL.phase, CVT.name as cvname, F.feature_id, F.uniquename, ".
+          "  FL.featureloc_id ".
+          "FROM {featureloc} FL ".
+          "  INNER JOIN {Feature} F ON F.feature_id = FL.feature_id ".
+          "  INNER JOIN {Cvterm} CVT ON CVT.cvterm_id = F.type_id ".
+          "WHERE srcfeature_id = :srcfeature_id AND ".
+          "  NOT(CVT.name = 'match' or CVT.name = 'match_part') ".
+          "ORDER BY FL.fmin, FL.fmax";
+   $results = chado_query($sql, array(':srcfeature_id' => $map->feature_id));
+   $alignments = array();
+   $i=0;
+   while ($subfeature = $results->fetchObject()) {
+      $alignments[$i++] = $subfeature;
+   }
+   $additions->alignments = $alignments;
+   
+   return $additions;
+}
+/************************************************************************
+*
+*/   
+function tripal_analysis_unigene_load_organism_unigenes($organism) {
+
+   // get information about this assemblies and add it to the items in this node
+   $sql = "SELECT * FROM {organism_unigene_mview} OUM ".
+          "  INNER JOIN {analysis} A  ON A.analysis_id = OUM.analysis_id ".
+          "WHERE OUM.organism_id = :organism_id ".
+          "ORDER BY A.timeexecuted DESC";
+   $results = chado_query($sql, array(':organism_id' => $organism->organism_id));
+
+   $unigenes = array();
+   $i=0;
+   $sql = "SELECT nid FROM {chado_analysis} WHERE analysis_id = :analysis_id";
+   while ($unigene = $results->fetchObject()) {
+      $analysis_id = $unigene->analysis_id;
+      $c_node = db_query($sql, array(':analysis_id' => $analysis_id))->fetchObject();
+      if ($c_node) {  
+         $unigene->nid = $c_node->nid;
+      }
+      // add in the properties
+      $unigene_name = tripal_analysis_get_property($analysis_id, 'analysis_unigene_name');
+      $num_contigs  = tripal_analysis_get_property($analysis_id, 'analysis_unigene_num_contigs');
+      $num_reads    = tripal_analysis_get_property($analysis_id, 'analysis_unigene_num_reads');
+      $num_clusters = tripal_analysis_get_property($analysis_id, 'analysis_unigene_num_clusters');
+      $num_singlets = tripal_analysis_get_property($analysis_id, 'analysis_unigene_num_singlets');
+      
+      $unigene->unigene_name = $unigene_name->value;
+      $unigene->num_reads = $num_reads->value;
+      $unigene->num_clusters = $num_clusters->value;
+      $unigene->num_contigs = $num_contigs->value;     
+      $unigene->num_singlets = $num_singlets->value;
+
+      $unigenes[$i++] = $unigene;
+   }
+   return $unigenes;
+}
+/************************************************************************
+*
+*/   
+function tripal_analysis_unigene_load_feature_unigenes($feature) {
+
+   // first get all the unigene analyses for this organism
+   $sql = "SELECT * FROM {organism_unigene_mview} OUM ".
+          "  INNER JOIN {analysis} A  ON A.analysis_id = OUM.analysis_id ".
+          "WHERE OUM.organism_id = :organism_id ".
+          "ORDER BY A.timeexecuted DESC";
+   $results = chado_query($sql, array(':organism_id' => $feature->organism_id->organism_id));
+
+   // iterate through the unigenes and find those that use this feature
+   $unigenes = array();
+   $i=0;
+   $sql = "SELECT nid FROM {chado_analysis} WHERE analysis_id = :analysis_id";
+   while ($unigene = $results->fetchObject()) {
+      $analysis_id = $unigene->analysis_id;
+
+      // check if this feature is present in the unigene
+      $values = array(
+         'feature_id' => $feature->feature_id,
+         'analysis_id' => $analysis_id,
+      );
+      $hasFeature = tripal_core_chado_select('analysisfeature', array('*'), $values);
+      
+      // if the feature is present then get information about it
+      if (sizeof($hasFeature) > 0) {
+         // see if there is a drupal node for this unigene
+         $c_node = db_query($sql, array(':analysis_id' => $analysis_id))->fetchObject();
+         if ($c_node) {  
+            $unigene->nid = $c_node->nid;
+         }
+         // add in the properties
+         $unigene_name = tripal_analysis_get_property($analysis_id, 'analysis_unigene_name');
+         $singlet = tripal_core_get_property('analysisfeature', $analysis_id, 'singlet', 'tripal');       
+         
+         if ($unigene_name) {
+           $unigene->unigene_name = $unigene_name->value;
+         } 
+         if ($singlet) {   
+           $unigene->singlet = $singlet->value;
+         }
+
+         $unigenes[$i++] = $unigene;
+      }
+   }
+   return $unigenes;
+}
+/*******************************************************************************
+ * Tripal Unigene administrative setting form. This function is called by
+ * tripal_analysis module which asks for an admin form to show on the page
+ */
+function tripal_analysis_unigene_get_settings() {
+  $settings = new stdClass ();
+  // Add 'chado_feature' to allowed content types for showing unigene results
+  $allowedoptions ['chado_feature'] = "Show 'ESTs in this contig' on feature pages";
+  $allowedoptions ['chado_organism'] = "Show assemblies on organism pages";
+  
+  $form ['description'] = array (
+      '#markup' => t ( "This option allows user to display the unigene assembly " . "information. For contigs, this would include an alignment and for " . "organisms this would be a list of assemblies. Check the box to " . "enable the display of unigene information. Uncheck to disable." ),
+  );
+  
+  $form ['tripal_analysis_unigene_setting'] = array (
+      '#type' => 'checkboxes',
+      '#options' => $allowedoptions,
+      '#default_value' => variable_get ( 'tripal_analysis_unigene_setting', array () ) 
+  );
+  $settings->form = $form;
+  $settings->title = "Tripal Unigene";
+  return $settings;
+}
+
+/**
+ * Implementation of hook_form_alter()
+ *
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ *
+ */
+function tripal_analysis_unigene_form_alter(&$form, &$form_state, $form_id) {
+
+  if ($form_id == "chado_analysis_unigene_node_form") {
+    // turn off preview button for insert/updates
+    $form['actions']['preview']['#access'] = FALSE;
+  }
+}

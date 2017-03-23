@@ -1,0 +1,235 @@
+<?php
+/**
+ * @file
+ * Functions pertaining to the install/uninstall of this module
+ */
+
+/**
+ * Implements hook_disable().
+ * Disable default views when module is disabled
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_disable() {
+
+  // Disable all default views provided by this module
+  require_once("tripal_organism.views_default.inc");
+  $views = tripal_organism_views_default_views();
+  foreach (array_keys($views) as $view_name) {
+    tripal_disable_view($view_name,FALSE,array('suppress_error' => TRUE));
+  }
+
+}
+
+/**
+ * Implementation of hook_install().
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_install() {
+  // cvs & cvterms.
+  tripal_organism_add_cvs();
+  tripal_organism_add_cvterms();
+
+  // set the default vocabularies.
+  tripal_set_default_cv('organismprop', 'type_id', 'organism_property');
+
+  // Add taxonomic terms.
+  $obo_id = tripal_insert_obo('Taxonomic Rank', 'http://purl.obolibrary.org/obo/taxrank.obo');
+  tripal_submit_obo_job(array('obo_id' => $obo_id));
+}
+
+/**
+ * Implementation of hook_schema().
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_schema() {
+ $schema['chado_organism'] = array(
+      'fields' => array(
+         'vid' => array(
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0
+          ),
+         'nid' => array(
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+            'default' => 0
+          ),
+         'organism_id' => array(
+            'type' => 'int',
+            'not null' => TRUE,
+            'default' => 0
+          )
+      ),
+      'indexes' => array(
+         'organism_id' => array('organism_id')
+      ),
+      'unique keys' => array(
+         'nid_vid' => array('nid', 'vid'),
+         'vid' => array('vid')
+      ),
+      'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implementation of hook_uninstall().
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_uninstall() {
+
+}
+
+/**
+ * Implementation of hook_requirements().
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_requirements($phase) {
+  $requirements = array();
+  if ($phase == 'install') {
+    // make sure chado is installed
+    if (!$GLOBALS["chado_is_installed"]) {
+      $requirements ['tripal_organism'] = array(
+            'title' => "tripal_organism",
+            'value' => "ERROR: Chado must be installed before this module can be enabled",
+            'severity' => REQUIREMENT_ERROR,
+      );
+    }
+  }
+  return $requirements;
+}
+
+/**
+ * Add cvterms related to organisms
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_add_cvs() {
+  tripal_insert_cv(
+    'organism_property',
+    'Contains properties for organisms'
+  );
+}
+
+/**
+ * Add cvterms pertaining to organisms
+ *
+ * @ingroup tripal_organism
+ */
+function tripal_organism_add_cvterms() {
+
+}
+
+/**
+ * This is the required update for tripal_organism when upgrading from Drupal core API 6.x.
+ *
+ */
+function tripal_organism_update_7200() {
+
+  // Make sure we have the full API loaded this will help during a
+  // site upgrade when the tripal_core module is disabled.
+  module_load_include('module', 'tripal_core', 'tripal_core');
+  tripal_core_import_api();
+  module_load_include('inc', 'tripal_cv', 'api/tripal_cv.api');
+
+  // Add the new organism_property vocabulary
+  // We cannot use the Tripal API calls in the 7000 update
+  // because during upgrade the tripal_core should also be disabled
+  try {
+    tripal_insert_cv(
+        'organism_property',
+        'Contains properties for organisms'
+    );
+    tripal_set_default_cv('organismprop', 'type_id', 'organism_property');
+  }
+  catch (\PDOException $e) {
+    $error = $e->getMessage();
+    throw new DrupalUpdateException('Failed to add organism_property vocabulary: '. $error);
+  }
+
+
+  // During the upgrade from D6 to D7 the vocabulary terms assigned to organisms were
+  // copied to the field_data_taxonomyextra table rather than to the correct
+  // field_data_taxonomy_vocabulary_[vid] table. We'll move them.
+  $vid = db_query("SELECT vid FROM {taxonomy_vocabulary} WHERE name = 'Organism'")->fetchField();
+  if ($vid) {
+    try {
+      if (db_table_exists('field_data_taxonomyextra')) {
+        // first move from the field_data_taxonomyextra table
+        $sql = "
+          INSERT INTO {field_data_taxonomy_vocabulary_$vid}
+            (entity_type, bundle, deleted, entity_id, revision_id, language, delta, taxonomy_vocabulary_" . $vid. "_tid)
+          (SELECT entity_type, bundle, deleted, entity_id, revision_id, language, delta, taxonomyextra_tid
+           FROM field_data_taxonomyextra
+           WHERE bundle = 'chado_feature')
+        ";
+        db_query($sql);
+        $sql = "DELETE FROM field_data_taxonomyextra WHERE bundle = 'chado_organism'";
+        db_query($sql);
+
+        // next move from the field_revision_taxonomyextra table
+        $sql = "
+          INSERT INTO {field_revision_taxonomy_vocabulary_$vid}
+            (entity_type, bundle, deleted, entity_id, revision_id, language, delta, taxonomy_vocabulary_" . $vid. "_tid)
+          (SELECT entity_type, bundle, deleted, entity_id, revision_id, language, delta, taxonomyextra_tid
+           FROM field_revision_taxonomyextra
+           WHERE bundle = 'chado_feature')
+        ";
+        db_query($sql);
+        $sql = "DELETE FROM field_revision_taxonomyextra WHERE bundle = 'chado_organism'";
+        db_query($sql);
+      }
+    }
+    catch (\PDOException $e) {
+      $error = $e->getMessage();
+      throw new DrupalUpdateException('Could not move organism taxonomy terms: '. $error);
+    }
+  }
+}
+
+/**
+ * Adds the taxonomic rank vocabulary.
+ */
+function tripal_organism_update_7201() {
+  try {
+    // Make sure we have the full API loaded this will help during a
+    // site upgrade when the tripal_core module is disabled.
+    module_load_include('module', 'tripal_core', 'tripal_core');
+    tripal_core_import_api();
+    module_load_include('inc', 'tripal_cv', 'api/tripal_cv.api');
+
+    // Add taxonomic terms.
+    $obo_id = tripal_insert_obo('Taxonomic Rank', 'http://purl.obolibrary.org/obo/taxrank.obo');
+    tripal_submit_obo_job(array('obo_id' => $obo_id));
+  }
+  catch (\PDOException $e) {
+    $error = $e->getMessage();
+    throw new DrupalUpdateException('Could not add taxrank ontology: '. $error);
+  }
+}
+
+/**
+ * Implementation of hook_update_dependencies().
+ *
+ * It specifies a list of other modules whose updates must be run prior to
+ * this one.  It also ensures the the Tripal API is in scope for site
+ * upgrades when tripal_core is disabled.
+ */
+function tripal_organism_update_dependencies() {
+
+  $dependencies = array();
+
+  // the tripal_cv update 7200 must run prior to update 7200 of this module
+  $dependencies['tripal_organism'][7200] = array(
+    'tripal_cv' => 7200
+  );
+
+  return $dependencies;
+}

@@ -1,0 +1,182 @@
+<?php
+
+require_once "api/tripal_analysis_go.api.inc";
+require_once "includes/tripal_analysis_go.gaf_loader.inc";
+require_once "includes/tripal_analysis_go.admin.inc";
+require_once "includes/tripal_analysis_go.chado_node.inc";
+require_once "includes/tripal_analysis_go.chart.inc";
+require_once "includes/tripal_analysis_go.tree.inc";
+require_once "theme/tripal_analysis_go.theme.inc";
+
+
+
+/**
+ * Implements hook_init().
+ */
+function tripal_analysis_go_init(){
+  drupal_add_css("https://cdnjs.cloudflare.com/ajax/libs/jstree/3.3.2/themes/default/style.min.css", array('type' => 'external'));
+
+  drupal_add_css(drupal_get_path('module', 'tripal_analysis_go') . '/theme/css/tripal_analysis_go.css');
+
+  // We need a newer version of jquery for jstree
+  drupal_add_js("https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.0/jquery.min.js", array(
+    'type' => 'external',
+    'scope' => 'header',
+    'group' => 15,
+    'every_page' => TRUE,
+    'weight' => 100,
+  ));
+  drupal_add_js("https://cdnjs.cloudflare.com/ajax/libs/jstree/3.2.1/jstree.min.js", array(
+    'type' => 'external',
+    'scope' => 'header',
+    'group' => 15,
+    'every_page' => TRUE,
+    'weight' => 400,
+  ));
+  drupal_add_js("https://www.gstatic.com/charts/loader.js", array(
+    'type' => 'external',
+    'scope' => 'header',
+    'group' => 15,
+    'every_page' => TRUE,
+    'weight' => 400,
+  ));
+  drupal_add_js("if (typeof feature_viewer_jquery == 'undefined') {var feature_viewer_jquery = jQuery.noConflict(true);}", array(
+    'type' => 'inline',
+    'scope' => 'header',
+    'group' => 15,
+    'every_page' => TRUE,
+    'weight' => 1000,
+  ));
+
+  drupal_add_js('misc/ajax.js');
+  drupal_add_js(drupal_get_path('module', 'tripal_analysis_go') . '/theme/js/tripal_analysis_go.js', array(
+    'group' => 15,
+    'weight' => 1200,
+  ));
+}
+
+/**
+ * Implements hook_menu().
+ */
+function tripal_analysis_go_menu() {
+  $items = array();
+
+  $items['admin/tripal/extension/tripal_go_analysis'] = array(
+    'title' => 'GO Analyses',
+    'description' => 'Administrative pages for the Tripal GO Analysis module.',
+    'page callback' => 'tripal_analysis_go_admin_view',
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/tripal/extension/tripal_go_analysis/configuration'] = array(
+    'title' => 'Settings',
+    'description' => 'Settings for the displays of GO analysis results.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('tripal_analysis_go_settings_form'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1
+  );
+  $items['admin/tripal/extension/tripal_go_analysis/sync'] = array(
+    'title' => ' Sync',
+    'description' => 'Create pages on this site for GO analyses',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('chado_node_sync_form', 'tripal_analysis_go', 'chado_analysis_go'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2
+  );
+  $items['download_goterm_features'] = array(
+      'path' => 'download_goterm_features',
+      'title' => t('Get GO Term Features'),
+      'page callback' => 'tripal_analysis_go_get_goterm_features',
+      'page arguments' => array(1,2),
+      'access arguments' => array('access chado_analysis_go content'),
+      'type' => MENU_CALLBACK
+   );
+
+   return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function tripal_analysis_go_theme($existing, $type, $theme, $path) {
+  $core_path = drupal_get_path('module', 'tripal_core');
+  $items = array(
+    'node__chado_analysis_go' => array (
+      'template' => 'node--chado-generic',
+      'render element' => 'node',
+      'base hook' => 'node',
+      'path' => "$core_path/theme/templates"
+    ),
+    'tripal_analysis_go_base' => array(
+      'variables' => array('node' => NULL),
+      'template' => 'tripal_analysis_go_base',
+      'path' => "$path/theme/templates",
+    ),
+    'tripal_analysis_go_teaser' => array(
+      'variables' => array('node' => NULL),
+      'template' => 'tripal_analysis_go_teaser',
+      'path' => "$path/theme/templates",
+    ),
+    'tripal_organism_go_summary' => array (
+      'variables' => array('node' => null),
+      'template' => 'tripal_organism_go_summary',
+      'path' => "$path/theme/templates",
+    ),
+
+    // tripal_feature theme
+    'tripal_feature_go_results' => array (
+        'template' => 'tripal_feature_go_results',
+        'variables' => array ('node' => NULL),
+        'path' => "$path/theme/templates"
+    ),
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function tripal_analysis_go_permission() {
+  return array(
+    'access chado_analysis_go content' => array(
+      'title' => t('View GO Analyses'),
+      'description' => t('Allow users to view GO analysis pages.'),
+    ),
+  );
+}
+
+/**
+ *
+ *
+ * @ingroup tripal_feature
+ */
+function tripal_analysis_go_job_describe_args($callback,$args){
+   $new_args = array();
+   if($callback == 'tripal_analysis_go_load_gaf'){
+
+      // add in the analysis
+      if($args[2]){
+         $analysis = chado_select_record('analysis',array('name'),array('analysis_id' => $args[0]));
+         $new_args['Analysis'] = $analysis[0]->name;
+      }
+
+      $new_args['GAF 2.0 file'] = $args[1];
+
+      $new_args['Sequence Type'] = $args[2];
+
+      if(!$args[3]){
+        $new_args['Use Unique Name'] = 'No';
+      } else {
+        $new_args['Use Unique Name'] = 'Yes';
+      }
+
+      $new_args['Function to perform'] = $args[4];
+
+      $new_args['Regular expression for the feature name'] = $args[5];
+   }
+   return $new_args;
+}

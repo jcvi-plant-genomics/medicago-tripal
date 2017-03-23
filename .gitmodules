@@ -1,0 +1,3 @@
+[submodule "sites/all/themes/medicago"]
+    path = sites/all/themes/medicago
+    url = https://github.com/jcvi-plant-genomics/medicago-theme.git
