@@ -305,7 +305,6 @@ function tripal_core_node_view_build_toc(&$build) {
         continue;
       }
 
-
       // For backwards compatibility we will handle the content type fields
       // named 'field_resource_blocks', 'field_resource_titles', and
       // 'field_resource_links' these fields can be added on the Drupal content

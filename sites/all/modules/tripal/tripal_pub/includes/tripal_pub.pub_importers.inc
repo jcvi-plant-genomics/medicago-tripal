@@ -10,6 +10,17 @@
  * @ingroup tripal_pub
  */
 function tripal_pub_importers_list() {
+
+  // Check to make sure that the tripal_pub vocabulary is loaded. If not, then
+  // warn the user that they should load it before continuing.
+  $pub_cv = chado_select_record('cv', array('cv_id'), array('name' => 'tripal_pub'));
+  if (count($pub_cv) == 0) {
+    drupal_set_message(t('The Tripal Pub vocabulary is currently not loaded. ' .
+        'This vocabulary is required to be loaded before importing of ' .
+        'publications.  <br>Please !import',
+        array('!import' => l('load the Tripal Publication vocabulary', 'admin/tripal/loaders/obo_loader'))), 'warning');
+  }
+
   // clear out the session variable when we view the list.
   unset($_SESSION['tripal_pub_import']);
 
@@ -956,7 +967,6 @@ function tripal_pub_add_publication($pub_details, &$action, $do_contact = FALSE,
   // before proceeding check to see if the publication already exists. If there is only one match
   // and the $update_if_exists is NOT set then return FALSE
   $pub_ids = tripal_publication_exists($pub_details);
-
   if(count($pub_ids) == 1 and !$update_if_exists) {
     tripal_report_error('tripal_pub', TRIPAL_NOTICE,
      "There is a publication that is a duplicate of this publication. Cannot continue. It either ".
@@ -987,6 +997,9 @@ function tripal_pub_add_publication($pub_details, &$action, $do_contact = FALSE,
     );
     $action = 'skipped';
     return FALSE;
+  }
+  if(count($pub_ids) == 1 and $update_if_exists) {
+    $pub_id = $pub_ids[0];
   }
 
   // get the publication type (use the first publication type)
@@ -1500,7 +1513,8 @@ function tripal_execute_active_pub_importers($report_email = FALSE, $do_update =
     print "Syncing publications with Drupal...\n";
     chado_node_sync_records('pub');
 
-    // iterate through each of the reports and generate a final report with HTML links
+    // Iterate through each of the reports and generate a final report with
+    // HTML links.
     $HTML_report = '';
     if ($report_email) {
       $HTML_report .= "<html>";

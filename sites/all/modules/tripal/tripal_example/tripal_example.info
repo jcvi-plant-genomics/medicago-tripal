@@ -26,7 +26,7 @@ package = Tripal Extensions
 ; Follow these instructions when specifying the version:
 ; https://drupal.org/node/1015226
 ;
-version = 7.x-2.1-beta2
+version = 7.x-2.1
 
 ;
 ; Style-sheets containing CSS that should always be available for the
@@ -49,9 +49,9 @@ dependencies[] = tripal_views
 dependencies[] = tripal_db
 dependencies[] = tripal_cv
 
-; Information added by Drupal.org packaging script on 2016-07-02
-version = "7.x-2.1-beta3"
+; Information added by Drupal.org packaging script on 2017-04-01
+version = "7.x-2.1"
 core = "7.x"
 project = "tripal"
-datestamp = "1467434044"
+datestamp = "1491080887"
 

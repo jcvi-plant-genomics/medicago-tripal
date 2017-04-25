@@ -11,10 +11,25 @@
 $stdout = fopen('php://stdout', 'w');
 
 // we require one command-line argument
-if (sizeof($argv) < 2) {
+if (sizeof($argv) < 5) {
   print_usage($stdout);
   exit;
 }
+
+$job_id = $argv[1];
+$root = $argv[2];
+$username = $argv[3];
+$do_parallel = $argv[4];
+$max_jobs = (isset($argv[5]) ? $argv[5] : -1;  // -1 = don't limit number of consecutive jobs
+
+/**
+ * Root directory of Drupal installation.
+ */
+define('DRUPAL_ROOT', getcwd());
+
+require_once DRUPAL_ROOT . '/includes/bootstrap.inc';
+drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+menu_execute_active_handler();
 
 $drupal_base_url = parse_url('http://www.example.com');
 $_SERVER['HTTP_HOST'] = $drupal_base_url['host'];
@@ -23,12 +38,7 @@ $_SERVER['REQUEST_URI'] = $_SERVER['SCRIPT_NAME'] = $_SERVER['PHP_SELF'];
 $_SERVER['REMOTE_ADDR'] = NULL;
 $_SERVER['REQUEST_METHOD'] = NULL;
 
-require_once 'includes/bootstrap.inc';
-drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
 
-// check to make sure the username is valid
-$username = $argv[1];
-$do_parallel = $argv[2];
 $results = db_query("SELECT * FROM {users} WHERE name = :name", array(':name' => $username));
 $u = $results->fetchObject();
 if (!$u) {
@@ -39,12 +49,12 @@ if (!$u) {
 global $user;
 $user = user_load($u->uid);
 
-
+fwrite($stdout, "\n" . date('Y-m-d' H:i:s) . "\n");
 fwrite($stdout, "Tripal Job Launcher\n");
 fwrite($stdout, "Running as user ' . $username . '\n");
 fwrite($stdout, "-------------------\n");
 
-tripal_launch_job($do_parallel);
+tripal_launch_job($do_parallel, null, $max_jobs);
 
 /**
  * Print out the usage instructions if they are not followed correctly
@@ -53,6 +63,6 @@ tripal_launch_job($do_parallel);
  */
 function print_usage($stdout) {
   fwrite($stdout, "Usage:\n");
-  fwrite($stdout, "  php ./sites/all/modules/tripal_core/tripal_launch_jobs <username> \n\n");
+  fwrite($stdout, "  php tripal_launch_job <job_id> <drupal_root_path> <username> <do parallel>\n\n");
   fwrite($stdout, "    where <username> is a Drupal user name\n\n");
 }

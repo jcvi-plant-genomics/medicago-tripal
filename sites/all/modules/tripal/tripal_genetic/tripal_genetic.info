@@ -3,7 +3,7 @@ description = Supports the genetic tables of Chado by providing pages for viewin
 core = 7.x
 project = tripal
 package = Tripal
-version = 7.x-2.1-beta2
+version = 7.x-2.1
 
 dependencies[] = tripal_core
 dependencies[] = tripal_views
@@ -11,9 +11,9 @@ dependencies[] = tripal_cv
 dependencies[] = tripal_feature
 dependencies[] = tripal_phenotype
 
-; Information added by Drupal.org packaging script on 2016-07-02
-version = "7.x-2.1-beta3"
+; Information added by Drupal.org packaging script on 2017-04-01
+version = "7.x-2.1"
 core = "7.x"
 project = "tripal"
-datestamp = "1467434044"
+datestamp = "1491080887"
 
