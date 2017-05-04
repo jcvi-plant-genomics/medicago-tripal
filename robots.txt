@@ -48,6 +48,7 @@ Allow: /themes/*.gif
 Allow: /themes/*.jpg
 Allow: /themes/*.jpeg
 Allow: /themes/*.png
+Allow: /search/blast
 # Directories
 Disallow: /includes/
 Disallow: /misc/
