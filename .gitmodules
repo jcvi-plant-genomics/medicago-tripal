@@ -1,3 +1,6 @@
 [submodule "sites/all/themes/medicago"]
     path = sites/all/themes/medicago
     url = https://github.com/jcvi-plant-genomics/medicago-theme.git
+[submodule "sites/all/modules/intermine_search"]
+	path = sites/all/modules/intermine_search
+	url = https://github.com/jcvi-plant-genomics/intermine-search-drupal

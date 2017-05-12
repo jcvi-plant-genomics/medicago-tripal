@@ -1,8 +1,0 @@
-name = MedicMine Search
-description = Search integration for MTGD MedicMine.
-package = MTGD
-version = 7.x-1.0
-core = 7.x
-
-
-stylesheets[all][] = medicmine_search.css
